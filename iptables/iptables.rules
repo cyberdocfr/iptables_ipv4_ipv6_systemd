@@ -74,6 +74,12 @@ $IP6T -t filter -A OUTPUT -p ipv6-icmp -j ACCEPT
 ### Étape2: Protection face aux attaques réseaux connues.
 ## 
 # IPv4
+# IPv6
+## Blocage des paquets anormaux/inutiles.
+# IPv6: On désactive les paquets RH0 devenus obsolètes (ils sont dépréciés -> RFC 5095)
+$IP6T -A INPUT -m rt --rt-type 0 -j DROP
+$IP6T -A OUTPUT -m rt --rt-type 0 -j DROP
+$IP6T -A FORWARD -m rt --rt-type 0 -j DROP
 
 #########################################################################
 ### Étape3: On charge les blacklistes d'adresses IP (v4 et v6).
@@ -81,9 +87,11 @@ $IP6T -t filter -A OUTPUT -p ipv6-icmp -j ACCEPT
 
 #########################################################################
 ### Étape4: Règles de flux personnalisées.
-## Activation (ou pas) du routage
+## Activation (ou pas) du routage (suffit de décommenter la ligne pour l'activer)
 # IPv4
+
 # IPv6
+#echo "1" >/proc/sys/net/ipv6/conf/all/forwarding
 ## Règles concernant les flux entrants (chaine INPUT)
 # IPv4
 # IPv6
@@ -95,26 +103,51 @@ $IP6T -t filter -A OUTPUT -p ipv6-icmp -j ACCEPT
 # IPv6
 
 #########################################################################
-### Étape5: Marquage des flux bloqués pour faciliter la recherche dans les logs.
-##  On mets ici les flux que l'on veut bloquer sans les journaliser (broadcast, ...)
-$IPT -t filter -A INPUT -d 255.255.255.255 -j DROP
-### On mets en place un marquage pour faciliter l'exploitation des logs
+### Étape5: Marquage des flux bloqués pour faciliter la recherche dans les logs
+
+## IPv4: On mets en place un marquage pour faciliter l'exploitation des logs
 #Création de la chaine dédiée au marquage des flux en transit bloqués 
 $IPT -N LOG_DROP_FORWARD
-$IPT -A LOG_DROP_FORWARD -j LOG --log-prefix '[IPTABLES FORWARD DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+$IPT -A LOG_DROP_FORWARD -j LOG --log-prefix '[IPTABLES IPv4 FORWARD DROP] : ' #On ajoute un prefixe à tous les flux journalisés
 $IPT -A LOG_DROP_FORWARD -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
 #Création de la chaine dédiée au marquage des flux entrant bloqués
 $IPT -N LOG_DROP_INPUT 
-$IPT -A LOG_DROP_INPUT -j LOG --log-prefix '[IPTABLES INPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+$IPT -A LOG_DROP_INPUT -j LOG --log-prefix '[IPTABLES IPv4 INPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
 $IPT -A LOG_DROP_INPUT -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
 #Création de la chaine dédiée au marquage des flux sortants bloqués
 $IPT -N LOG_DROP_OUTPUT
-$IPT -A LOG_DROP_OUTPUT -j LOG --log-prefix '[IPTABLES OUTPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
-$IPT -A LOG_DROP_OUTPUT -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
+$IPT -A LOG_DROP_OUTPUT -j LOG --log-prefix '[IPTABLES IPv4 OUTPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+$IPT -A LOG_DROP_OUTPUT -j DROP #Apres avoir marqué les flux bloqués, on les DROP.
+#Création de la chaine dédiée au marquage des flux anormaux/inutiles 
+$IPT -N LOG_DROP_ANORMAUX
+$IPT -A LOG_DROP_ANORMAUX -j LOG --log-prefix '[IPTABLES IPv4 PAQUETS ANORMAUX] : ' #On ajoute un prefixe à tous les flux journalisés
+$IPT -A LOG_DROP_ANORMAUX -j DROP #Apres avoir marqué les flux bloqués, on les DROP.
 # On envoi les flux non précédements autorisés dans les chaines qui préfixes les logs.
 $IPT -A FORWARD -j LOG_DROP_FORWARD #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
 $IPT -A INPUT -j LOG_DROP_INPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
-$IPT -A OUTPUT -j LOG_DROP_OUTPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
+$IPT -A OUTPUT -j LOG_DROP_OUTPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe 
+
+# IPv6: On mets en place un marquage pour faciliter l'exploitation des logs
+#Création de la chaine dédiée au marquage des flux en transit bloqués 
+$IP6T -N LOG_DROP_FORWARD
+$IP6T -A LOG_DROP_FORWARD -j LOG --log-prefix '[IPTABLES IPv6 FORWARD DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+$IP6T -A LOG_DROP_FORWARD -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
+#Création de la chaine dédiée au marquage des flux entrant bloqués
+$IP6T -N LOG_DROP_INPUT 
+$IP6T -A LOG_DROP_INPUT -j LOG --log-prefix '[IPTABLES IPv6 INPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+$IP6T -A LOG_DROP_INPUT -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
+#Création de la chaine dédiée au marquage des flux sortants bloqués
+$IP6T -N LOG_DROP_OUTPUT
+$IP6T -A LOG_DROP_OUTPUT -j LOG --log-prefix '[IPTABLES IPv6 OUTPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+$IP6T -A LOG_DROP_OUTPUT -j DROP #Apres avoir marqué les flux bloqués, on les DROP.
+#Création de la chaine dédiée au marquage des flux anormaux/inutiles 
+$IP6T -N LOG_DROP_ANORMAUX
+$IP6T -A LOG_DROP_ANORMAUX -j LOG --log-prefix '[IPTABLES IPv6 PAQUETS ANORMAUX] : ' #On ajoute un prefixe à tous les flux journalisés
+$IP6T -A LOG_DROP_ANORMAUX -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
+# On envoi les flux non précédements autorisés dans les chaines qui préfixes les logs.
+$IP6T -A FORWARD -j LOG_DROP_FORWARD #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
+$IP6T -A INPUT -j LOG_DROP_INPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
+$IP6T -A OUTPUT -j LOG_DROP_OUTPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
 #########################################################################
 ### Étape finale: Le script a chargé l'ensemble des règles IPtables, on affiche à l'administrateur que c'est terminé.
 echo "firewall started [OK]"
