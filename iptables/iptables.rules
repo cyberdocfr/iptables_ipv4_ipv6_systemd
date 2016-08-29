@@ -1,0 +1,178 @@
+#!/bin/bash
+
+# programme iptables IPV4 et IPV6
+IPT=/sbin/iptables
+IP6T=/sbin/ip6tables
+
+# Les IPs
+IP_FIXE_ADMIN1=51.255.115.74
+IP_VPN_WIN=151.80.92.214
+#IP_FIXE_ADMIN2=xx.xx.xx.xx
+### FLUX des ADMINs
+IP_RDP_WIN=94.23.248.126
+iptables -t filter -A INPUT -s $IP_RDP_WIN -p tcp --dport 8006 -j ACCEPT #WEB PROXMOX
+iptables -t filter -A INPUT -s $IP_RDP_WIN -p tcp --dport 6922 -j ACCEPT
+
+#########################################################################
+    # Efface toutes les règles en cours. -F toutes. -X utilisateurs
+    $IPT -t filter -F
+    $IPT -t filter -X
+    $IPT -t nat -F
+    $IPT -t nat -X
+    $IPT -t mangle -F
+    $IPT -t mangle -X
+    #
+    $IP6T -t filter -F
+    $IP6T -t filter -X
+    # Il n'y a pas de NAT en IPV6
+    #$IP6T -t nat -F
+    #$IP6T -t nat -X
+    $IP6T -t mangle -F
+    $IP6T -t mangle -X
+
+    # Permettre à une connexion ouverte de recevoir du trafic autorise dans un sans (state full)
+    $IPT -t filter -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+    $IPT -t filter -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+    $IPT -t filter -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+    #
+    $IP6T -t filter -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+    $IP6T -t filter -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+    $IP6T -t filter -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+ 
+    # stratégie (-P) par défiaut : bloc tout par defaut
+    $IPT -t filter -P INPUT DROP
+    $IPT -t filter -P FORWARD DROP
+    $IPT -t filter -P OUTPUT DROP
+    #
+    $IP6T -t filter -P INPUT DROP
+    $IP6T -t filter -P FORWARD DROP
+    $IP6T -t filter -P OUTPUT DROP
+
+    # Loopback
+    $IPT -t filter -A INPUT -i lo -j ACCEPT
+    $IPT -t filter -A OUTPUT -o lo -j ACCEPT
+    #
+    $IP6T -t filter -A INPUT -i lo -j ACCEPT
+    $IP6T -t filter -A OUTPUT -o lo -j ACCEPT
+    
+    # ICMP J'envoie tous les codes ICMP de tous types a TOUT LE MONDE
+    $IPT -t filter -A OUTPUT -p icmp -j ACCEPT
+
+    # ICMP Les serveurs de monitoring d'OVH peuvent de faire une demande de PING (et uniquement du PING)
+	for IP_MONITORING in 92.222.184.0/24 92.222.185.0/24 92.222.186.0/24 167.114.37.0/24 151.80.231.244 151.80.231.245 151.80.231.246 213.186.33.13 8.33.137.2 37.59.0.235 213.251.184.9 213.186.45.4 213.186.50.98 188.165.197.250
+	do
+		$IPT -t filter -A INPUT -p icmp -s $IP_MONITORING -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+		$IPT -t filter -A OUTPUT -d $IP_MONITORING -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+		$IPT -t filter -A FORWARD -p icmp -s $IP_MONITORING -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+	done	
+
+##########################################
+### FLUX SORTANTS DU CT0               ###
+    # HTTP sortant du CT0
+    $IPT -t filter -A OUTPUT -p tcp --dport 80 -j ACCEPT
+    # DNS sortant du CT0
+    $IPT -t filter -A OUTPUT -p tcp --dport 53 -j ACCEPT
+    $IPT -t filter -A OUTPUT -p udp --dport 53 -j ACCEPT
+    $IP6T -t filter -A OUTPUT -p tcp --dport 53 -j ACCEPT
+    $IP6T -t filter -A OUTPUT -p udp --dport 53 -j ACCEPT
+    # NTP sortant du CT0
+    $IPT -t filter -A OUTPUT -p udp --dport 123 -j ACCEPT
+    $IP6T -t filter -A OUTPUT -p udp --dport 123 -j ACCEPT
+    # FTP sortant du CT0
+    $IPT -t filter -A OUTPUT -p tcp --dport 21 -j ACCEPT
+    $IP6T -t filter -A OUTPUT -p tcp --dport 21 -j ACCEPT
+    # SMTP sortant du CT0
+    $IPT -t filter -A OUTPUT -p tcp --dport 25 -j ACCEPT
+    $IP6T -t filter -A OUTPUT -p tcp --dport 25 -j ACCEPT
+
+# On laisse les sauvegardes vers le CT0 de SECBOX
+    $IPT -t filter -A OUTPUT -d 94.23.248.126 -j ACCEPT
+
+# On laisse sortir les flux en provenance du LAN interne vers Internet
+    $IPT -t filter -A FORWARD -i vmbr1 -j ACCEPT
+    ### On active le routage inter-cartes reseaux
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+
+##########################################
+### CONFIGURATION DU NAT               ###
+
+# On NAT par la SOURCE toutes les connexions sortantes des CTs
+    $IPT -t nat -A POSTROUTING -o vmbr0 -s 192.168.1.0/24 ! -d 192.168.1.0/24 -j MASQUERADE
+
+##########################################
+### FLUX D'ADMIN de WIN        ###
+
+$IPT -t nat -A PREROUTING -i vmbr0 -s 151.80.92.214 -p tcp --dport 6666 -j DNAT --to-destination 192.168.1.101:443
+#$IPT -t filter -A INPUT -s 151.80.92.214 -p tcp --dport 6666 -j ACCEPT
+$IPT -t filter -A FORWARD -d 192.168.1.101 -p tcp --dport 443 -j ACCEPT
+
+$IPT -t nat -A PREROUTING -i vmbr0 -p tcp --dport 999 -j DNAT --to-destination 192.168.1.204:22
+$IPT -t filter -A INPUT -p tcp --dport 999 -j ACCEPT
+$IPT -t filter -A FORWARD -d 192.168.1.204 -p tcp --dport 22 -j ACCEPT
+
+##########################################
+### FLUX D'ADMIN de JULESI        ###
+
+$IPT -t nat -A PREROUTING -i vmbr0 -s 86.238.5.88 -p tcp --dport 2016 -j DNAT --to-destination 192.168.1.207:22
+$IPT -t nat -A PREROUTING -i vmbr0 -s 37.187.0.48 -p tcp --dport 2016 -j DNAT --to-destination 192.168.1.207:22
+$IPT -t filter -A FORWARD -d 192.168.1.207 -p tcp --dport 22 -j ACCEPT
+
+##########################################
+### DEBUT DES FLUX AUTORISES EN ENTREE ###
+
+# On autorise les flux d'admin du PROXMOX
+    $IPT -t filter -A INPUT -p tcp --dport 6922 -j ACCEPT #SSH PROXMOX
+#    $IPT -t filter -A INPUT -p tcp --dport 8006 -j ACCEPT #WEB PROXMOX
+
+
+#win
+    $IPT -t filter -A INPUT -s $IP_VPN_WIN -p tcp --dport 8006 -j ACCEPT #WEB PROXMOX
+    $IPT -t nat -A PREROUTING -i vmbr0 -s $IP_VPN_WIN -p tcp --dport 777 -j DNAT --to-destination 192.168.1.101:443
+    $IPT -t filter -A INPUT -s $IPWIN -p tcp --dport 777 -j ACCEPT
+    $IPT -t filter -A FORWARD -s $IPWIN -d 192.168.1.101 -p tcp --dport 443 -j ACCEPT
+
+
+# accepte tout des IP d'ADMIN
+    $IPT -t filter -A INPUT -p tcp -s $IP_FIXE_ADMIN1 -j ACCEPT
+    $IPT -t filter -A INPUT -p udp -s $IP_FIXE_ADMIN1 -j ACCEPT
+    $IPT -t filter -A FORWARD -p tcp -s $IP_FIXE_ADMIN1 -j ACCEPT
+    $IPT -t filter -A FORWARD -p udp -s $IP_FIXE_ADMIN1 -j ACCEPT
+    #$IPT -t filter -A INPUT -p tcp -s $IP_FIXE_ADMIN2 -j ACCEPT
+    #$IPT -t filter -A INPUT -p udp -s $IP_FIXE_ADMIN2 -j ACCEPT
+
+##########################################
+### DEBUT DES FLUX AUTORISES EN FORWARD ###
+# On autorise les IPfailover a transiter
+	for IP_FAILOVER in 46.105.235.160/30 5.135.60.44/30
+	do
+		$IPT -t filter -A INPUT -p icmp -s $IP_FAILOVER -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+		$IPT -t filter -A OUTPUT -d $IP_FAILOVER -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+		$IPT -t filter -A FORWARD -s $IP_FAILOVER -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+	done	
+
+##########################################
+### CONFIGURATION DE LA JOURNALISATION ###
+
+### On mets ici les flux que l'on veut bloquer sans les journaliser (broadcast, ...)
+$IPT -t filter -A INPUT -d 255.255.255.255 -j DROP
+
+### On mets en place un marquage pour faciliter l'exploitation des logs
+    $IPT -N LOG_DROP_FORWARD #Création de la chaine dédiée au marquage des flux bloqués
+    $IPT -A LOG_DROP_FORWARD -j LOG --log-prefix '[IPTABLES FORWARD DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+    $IPT -A LOG_DROP_FORWARD -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
+    
+    $IPT -N LOG_DROP_INPUT #Création de la chaine dédiée au marquage des flux bloqués
+    $IPT -A LOG_DROP_INPUT -j LOG --log-prefix '[IPTABLES INPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+    $IPT -A LOG_DROP_INPUT -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
+
+    $IPT -N LOG_DROP_OUTPUT #Création de la chaine dédiée au marquage des flux bloqués
+    $IPT -A LOG_DROP_OUTPUT -j LOG --log-prefix '[IPTABLES OUTPUT DROP] : ' #On ajoute un prefixe à tous les flux journalisés
+    $IPT -A LOG_DROP_OUTPUT -j DROP #Apres avoir marqué les flux bloqués, on les DROP.  
+
+    $IPT -A FORWARD -j LOG_DROP_FORWARD #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
+    $IPT -A INPUT -j LOG_DROP_INPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
+    $IPT -A OUTPUT -j LOG_DROP_OUTPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
+
+   #
+    echo "firewall started [OK]"
+

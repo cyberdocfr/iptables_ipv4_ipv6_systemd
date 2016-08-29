@@ -1,0 +1,13 @@
+[Unit]
+Description=Firewall Iptables IPv4
+DefaultDependencies=no
+After=systemd-sysctl.service
+Before=sysinit.target
+[Service]
+Type=oneshot
+ExecStart=/etc/iptables/iptables.rules
+ExecReload=/etc/iptables/iptables.rules
+ExecStop=/etc/iptables/iptables.flush.all
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
