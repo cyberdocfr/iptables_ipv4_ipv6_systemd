@@ -2,11 +2,11 @@
 #titre          : iptables.rules
 #description    : Script de configuration d'un parefeu IPv4/IPv6 via Iptables.
 #auteur         : Cyberman
-#date           : 29-08-2016
-#version        : 0.1    
+#date           : 31-08-2016
+#version        : 0.2    
 #usage          : https://github.com/cyberdocfr/iptables_ipv4_ipv6_systemd
 #notes          :
-#==============================================================================
+#=======================================================================#
 
 #########################################################################
 ### Étape0: Définitions des variables et vérifications des prérequis.
@@ -50,7 +50,7 @@ $IP6T -t filter -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 $IP6T -t filter -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 ## Stratégie (-P) par défaut : on bloque tout par defaut
 # IPv4
-$IPT -P INPUT ACCEPT
+$IPT -P INPUT ACCEPT # REMPLACER ACCEPT PAR DROP UNE FOIS VOS REGLES DE FLUX ENTRANTS PERSONNALISEES
 $IPT -P FORWARD DROP
 $IPT -P OUTPUT DROP
 # IPv6
@@ -129,11 +129,7 @@ $IP6T -A OUTPUT -p icmpv6 --icmpv6-type router-solicitation -m hl --hl-eq 255 -j
 # IPv4
 #########################################################################
 ### Étape4: Règles de flux personnalisées.
-## Activation (ou pas) du routage (suffit de décommenter la ligne pour l'activer)
-# IPv4
-#echo "1" > /proc/sys/net/ipv4/ip_forward
-# IPv6
-#echo "1" >/proc/sys/net/ipv6/conf/all/forwarding
+#-----------------------------------------------------------------------#
 ## Gestion affinée du protocole ICMP et ICMPv6
 # IPv4: Messages ICMP utiles et non dangereux
 # IPv6: Messages ICMPv6 utiles et non dangereux
@@ -146,14 +142,52 @@ $IP6T -A OUTPUT -p icmpv6 --icmpv6-type packet-too-big -j ACCEPT
 $IP6T -A OUTPUT -p icmpv6 --icmpv6-type time-exceeded -j ACCEPT
 $IP6T -A OUTPUT -p icmpv6 --icmpv6-type parameter-problem -j ACCEPT
 $IP6T -A FORWARD -p icmpv6 -j DROP
+#-----------------------------------------------------------------------#
+## Modèles de règles, copier/coller juste en dessous puis décommenter 
+#$IPT -t filter -A INPUT -p tcp --dport 22 -j ACCEPT   ### IPv4: On autorise le SSH en entrée depuis n'importe qui
+#$IP6T -t filter -A INPUT -p tcp --dport 22 -j ACCEPT  ### IPv6: On autorise le SSH en entrée depuis n'importe qui
+#$IPT -t filter -A INPUT -s 192.168.1.5 -p tcp --dport 80 -j ACCEPT   ### IPv4: On autorise HTTP en entrée depuis 192.168.1.5 uniquement
+#$IP6T -t filter -A INPUT -p tcp --dport 22 -j ACCEPT  ### IPv6: On autorise le SSH en entrée depuis n'importe qui
+#-----------------------------------------------------------------------#
 ## Règles concernant les flux entrants (chaine INPUT)
 # IPv4
+# SSH sortant autorisés depuis n'importe qui
+$IPT -t filter -A INPUT -p tcp --dport 22 -j ACCEPT
 # IPv6
+$IP6T -t filter -A INPUT -p tcp --dport 22 -j ACCEPT
+#-----------------------------------------------------------------------#
 ## Règles concernant les flux sortants (chaine OUTPUT)
 # IPv4
-
+# HTTP et HTTPS sortant autorisés vers n'importe qui
+$IPT -t filter -A OUTPUT -p tcp --dport 80 -j ACCEPT
+# DNS sortant autorisé vers n'importe qui
+$IPT -t filter -A OUTPUT -p tcp --dport 53 -j ACCEPT
+$IPT -t filter -A OUTPUT -p udp --dport 53 -j ACCEPT
+# NTP sortant autorisé vers n'importe qui
+$IPT -t filter -A OUTPUT -p udp --dport 123 -j ACCEPT
+# FTP sortant autorisé vers n'importe qui
+$IPT -t filter -A OUTPUT -p tcp --dport 21 -j ACCEPT
+# SMTP sortant autorisé vers n'importe qui
+$IPT -t filter -A OUTPUT -p tcp --dport 25 -j ACCEPT
 # IPv6
+# DNS sortant autorisé vers n'importe qui
+$IP6T -t filter -A OUTPUT -p tcp --dport 53 -j ACCEPT
+$IP6T -t filter -A OUTPUT -p udp --dport 53 -j ACCEPT
+# NTP sortant autorisé vers n'importe qui
+$IP6T -t filter -A OUTPUT -p udp --dport 123 -j ACCEPT
+# FTP sortant autorisé vers n'importe qui
+$IP6T -t filter -A OUTPUT -p tcp --dport 21 -j ACCEPT
+# SMTP sortant autorisé vers n'importe qui
+$IP6T -t filter -A OUTPUT -p tcp --dport 25 -j ACCEPT
+#-----------------------------------------------------------------------#
 ## Règles concernant les flux en transit (chaine FORWARD)
+#----------------------------------#
+## Activation (ou pas) du routage (suffit de décommenter la ligne pour l'activer)
+# IPv4
+#echo "1" > /proc/sys/net/ipv4/ip_forward
+# IPv6
+#echo "1" >/proc/sys/net/ipv6/conf/all/forwarding
+#----------------------------------#
 # IPv4
 # IPv6
 #########################################################################
@@ -179,7 +213,7 @@ $IPT -A LOG_DROP_ANORMAUX -j LOG --log-prefix '[IPTABLES IPv4 PAQUETS ANORMAUX] 
 $IPT -A FORWARD -j LOG_DROP_FORWARD #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
 $IPT -A INPUT -j LOG_DROP_INPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe
 #$IPT -A OUTPUT -j LOG_DROP_OUTPUT #On envoie tout ce qui n'est pas autorisé dans la chaine LOG_DROP pour marquer les logs d'un prefixe 
-#-
+#-----------------------------------------------------------------------#
 # IPv6: On mets en place un marquage pour faciliter l'exploitation des logs
 #Création de la chaine dédiée au marquage des flux en transit bloqués 
 $IP6T -N LOG_DROP_FORWARD
@@ -209,4 +243,8 @@ $IP6T -A INPUT -p icmpv6 -j DROP
 #########################################################################
 ### Étape finale: Le script a chargé l'ensemble des règles IPtables, on affiche à l'administrateur que c'est terminé.
 echo "firewall started [OK]"
-#FIN
+###FIN
+
+###
+# Besoin d'aide ? Une proposition d'évolution ? Rendez-vous sur https://cyberdoc.fr
+###
