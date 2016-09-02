@@ -1,5 +1,5 @@
 [Unit]
-Description=Firewall Iptables IPv4
+Description=Firewall Iptables IPv4 IPv6 compatible SystemD
 DefaultDependencies=no
 After=systemd-sysctl.service
 Before=sysinit.target
