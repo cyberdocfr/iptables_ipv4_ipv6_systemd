@@ -34,9 +34,8 @@ $IPT -t mangle -X
 # IPv6
 $IP6T -t filter -F
 $IP6T -t filter -X
-# Il n'y a pas de NAT en IPv6, on commente les règles pour se souvenir que ce n'est pas un oubli.
-#$IP6T -t nat -F
-#$IP6T -t nat -X
+$IP6T -t nat -F
+$IP6T -t nat -X
 $IP6T -t mangle -F
 $IP6T -t mangle -X
 ## Permettre à une connexion ouverte de recevoir du trafic autorise dans un sans (state full)
