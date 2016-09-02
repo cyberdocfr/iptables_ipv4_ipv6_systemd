@@ -1,10 +1,25 @@
 #!/bin/sh
-iptables -F
-iptables -X
-iptables -t nat -F
-iptables -t nat -X
-iptables -t mangle -F
-iptables -t mangle -X
-iptables -P INPUT ACCEPT
-iptables -P FORWARD ACCEPT
-iptables -P OUTPUT ACCEPT
+
+# flush and remove all iptables rules
+# arg : iptables command (iptables or ip6tables)
+flushAndRemoveRules () {
+	IPT_COMMAND=$1
+	# flush and remove
+	$IPT_COMMAND -F
+	$IPT_COMMAND -X
+	$IPT_COMMAND -t nat -F
+	$IPT_COMMAND -t nat -X
+	$IPT_COMMAND -t mangle -F
+	$IPT_COMMAND -t mangle -X
+	# default policies
+	$IPT_COMMAND -P INPUT ACCEPT
+	$IPT_COMMAND -P FORWARD ACCEPT
+	$IPT_COMMAND -P OUTPUT ACCEPT
+}
+
+# for IPv4
+flushAndRemoveRules iptables
+# for IPv6
+flushAndRemoveRules ip6tables
+
+
